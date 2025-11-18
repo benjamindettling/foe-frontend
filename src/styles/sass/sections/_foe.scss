@@ -1,0 +1,146 @@
+// src/styles/sass/sections/_foe.scss
+@use "../abstracts/variables";
+@use "../abstracts/mixins";
+
+#foe-section {
+  background: linear-gradient(
+    to bottom right,
+    variables.$primary-color,
+    variables.$secondary-color
+  );
+  color: variables.$dark-blue-text;
+  padding: 4rem 0;
+  border-top: 0;
+
+  .foe-container {
+    @include mixins.respond(phone) {
+      padding: 0 1rem;
+    }
+  }
+
+  .foe-header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+
+    h2 {
+      font-size: 2.4rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: variables.$white-color;
+    }
+
+    p {
+      margin: 0;
+      font-size: 1rem;
+      color: variables.$white-color;
+      opacity: 0.9;
+    }
+  }
+
+  .foe-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    align-items: center;
+    justify-content: space-between;
+
+    @include mixins.respond(phone) {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    &__group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    label {
+      font-weight: 600;
+      color: variables.$white-color;
+      margin-right: 0.5rem;
+    }
+
+    select {
+      min-width: 120px;
+      padding: 0.5rem 0.75rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      background-color: rgba(255, 255, 255, 0.15);
+      color: variables.$white-color;
+      outline: none;
+      font-size: 0.9rem;
+      backdrop-filter: blur(6px);
+
+      &:focus {
+        border-color: variables.$white-color;
+      }
+    }
+  }
+
+  .foe-table-wrapper {
+    background-color: rgba(255, 255, 255, 0.9);
+    border-radius: 1rem;
+    padding: 1rem 1.5rem;
+    overflow-x: auto;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+
+    @include mixins.respond(phone) {
+      padding: 0.75rem 1rem;
+    }
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  thead {
+    th {
+      padding: 0.75rem;
+      text-align: left;
+      cursor: pointer;
+      white-space: nowrap;
+      user-select: none;
+      border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+
+      &.sortable:hover {
+        color: variables.$primary-color;
+      }
+
+      .sort-indicator {
+        margin-left: 0.4rem;
+        font-size: 0.8rem;
+        opacity: 0.8;
+      }
+    }
+  }
+
+  tbody {
+    tr:nth-child(even) {
+      background-color: rgba(0, 0, 0, 0.02);
+    }
+
+    td {
+      padding: 0.5rem 0.75rem;
+      white-space: nowrap;
+    }
+  }
+
+  .foe-badge-positive {
+    color: #1b5e20; // dark green
+    font-weight: 600;
+  }
+
+  .foe-badge-zero {
+    opacity: 0.7;
+  }
+
+  .foe-badge-missing {
+    opacity: 0.5;
+    font-style: italic;
+  }
+}
