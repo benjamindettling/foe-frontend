@@ -7,18 +7,27 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# OS
+.DS_Store
+
+# Node
+node_modules/
+dist/
+dist-ssr/
 *.local
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Vite env files
+.env
+.env.*
+!.env.example
+
+# Local overrides
+.env.local
+
+# Editor settings
+.vscode/
+.idea/
+
+# Temporary
+*.tmp
+*.swp
