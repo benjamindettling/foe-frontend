@@ -21,7 +21,7 @@ export async function fetchSnapshots() {
 /**
  * Fetch player rows for a given snapshot
  * Expected response: array of:
- *   { snapshot_id, player_id, guild_id, era_nr, points, battles }
+ *   { player_id, player_name, guild_id, guild_name, era_nr, points, battles }
  */
 export async function fetchPlayersBySnapshot(snapshotId) {
   const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/players`);

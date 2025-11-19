@@ -2,7 +2,9 @@
 import React from "react";
 
 const columns = [
+  { key: "player_name", label: "Player" },
   { key: "player_id", label: "Player ID" },
+  { key: "guild_name", label: "Guild" },
   { key: "guild_id", label: "Guild ID" },
   { key: "era_nr", label: "Era" },
   { key: "points", label: "Points" },
@@ -45,7 +47,9 @@ const PlayerTable = ({ rows, sortConfig, onSort }) => {
         )}
         {rows.map((row) => (
           <tr key={row.player_id}>
+            <td>{row.player_name ?? "-"}</td>
             <td>{row.player_id}</td>
+            <td>{row.guild_name ?? "-"}</td>
             <td>{row.guild_id ?? "-"}</td>
             <td>{row.era_nr}</td>
             <td>{row.points.toLocaleString()}</td>

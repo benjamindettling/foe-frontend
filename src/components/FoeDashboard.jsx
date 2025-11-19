@@ -211,7 +211,7 @@ const FoeDashboard = () => {
     <section id="foe-section">
       <div className="container foe-container">
         <div className="foe-header">
-          <h2>Forge of Empires Player Stats</h2>
+          <h1>Forge of Empires Player Stats</h1>
           <p>
             {currentSnapshot
               ? `Snapshot: ${new Date(
