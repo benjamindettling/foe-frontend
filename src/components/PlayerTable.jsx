@@ -3,9 +3,7 @@ import React from "react";
 
 const columns = [
   { key: "player_name", label: "Player" },
-  { key: "player_id", label: "Player ID" },
   { key: "guild_name", label: "Guild" },
-  { key: "guild_id", label: "Guild ID" },
   { key: "era_nr", label: "Era" },
   { key: "points", label: "Points" },
   { key: "battles", label: "Battles" },
@@ -47,13 +45,22 @@ const PlayerTable = ({ rows, sortConfig, onSort }) => {
         )}
         {rows.map((row) => (
           <tr key={row.player_id}>
+            {/* Player */}
             <td>{row.player_name ?? "-"}</td>
-            <td>{row.player_id}</td>
+
+            {/* Guild */}
             <td>{row.guild_name ?? "-"}</td>
-            <td>{row.guild_id ?? "-"}</td>
-            <td>{row.era_nr}</td>
+
+            {/* Era: show human-readable string from backend */}
+            <td>{row.era ?? "-"}</td>
+
+            {/* Points */}
             <td>{row.points.toLocaleString()}</td>
+
+            {/* Battles */}
             <td>{row.battles.toLocaleString()}</td>
+
+            {/* Battles Diff */}
             <td>
               {row.battles_diff == null ? (
                 <span className="foe-badge-missing">–</span>
