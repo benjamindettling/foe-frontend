@@ -196,15 +196,16 @@ const FoeDashboard = () => {
     });
   }, [rowsWithDiff, sortConfig]);
 
-  const handleSort = (column) => {
-    setSortConfig((prev) =>
-      prev.key === column
-        ? {
-            key: column,
-            direction: prev.direction === "asc" ? "desc" : "asc",
-          }
-        : { key: column, direction: "asc" }
-    );
+  const handleSort = (column, direction) => {
+    setSortConfig((prev) => {
+      if (!direction) {
+        const nextDirection =
+          prev.key === column && prev.direction === "asc" ? "desc" : "asc";
+        return { key: column, direction: nextDirection };
+      }
+
+      return { key: column, direction };
+    });
   };
 
   return (
