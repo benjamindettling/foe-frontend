@@ -59,7 +59,9 @@ const normalizeSettings = (draft) => ({
 
 const parseNumber = (val) => {
   if (val === "" || val === null || val === undefined) return null;
-  const num = Number(val);
+  const raw =
+    typeof val === "string" ? val.replace(/[',\s]/g, "").trim() : val;
+  const num = Number(raw);
   return Number.isFinite(num) ? num : null;
 };
 
@@ -509,7 +511,14 @@ const FoeDashboard = () => {
     const snapshotId = Number(activeTab?.settings?.snapshotId);
     if (!Number.isFinite(snapshotId)) return;
 
-    await updateRecruitmentStatus(playerId, updates);
+    const payload = {
+      recruitment_status: updates.recruitment_status ?? "",
+      recruitment_note: updates.recruitment_note ?? "",
+      recruitment_last_contacted_at:
+        updates.recruitment_last_contacted_at ?? "",
+    };
+
+    await updateRecruitmentStatus(playerId, payload);
 
     setPlayerCache((prev) => {
       const next = new Map(prev);
@@ -563,10 +572,10 @@ const FoeDashboard = () => {
       maxBattles: "",
       minBattlesDiff: "",
       maxBattlesDiff: "",
-      excludedGuilds: [],
+      excludedGuilds: ["𝕯𝖊𝖘𝖕𝖊𝖗𝖆𝖉𝖔𝖘", "Outsiders"],
       showInvitation: true,
       invitationCutoff: "",
-      excludeContacted: true,
+      excludeContacted: false,
     };
     const normalized = normalizeSettings(preset);
 

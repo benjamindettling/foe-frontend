@@ -1,5 +1,5 @@
 // src/components/PlayerTable.jsx
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const BASE_COLUMNS = [
   { key: "player_name", label: "Player" },
@@ -19,12 +19,14 @@ const daysSince = (dateStr) => {
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 };
 
-const invitationColor = (dateStr) => {
+const invitationColors = (dateStr) => {
   const days = daysSince(dateStr);
-  if (days == null) return undefined;
+  if (days == null) return { badge: undefined, row: undefined };
   const clamped = Math.max(0, Math.min(365, days));
   const hue = (clamped / 365) * 120; // 0=red, 120=green
-  return `hsl(${hue}, 70%, 55%)`;
+  const badge = `hsl(${hue}, 70%, 55%)`;
+  const row = `hsla(${hue}, 70%, 55%, 0.3)`;
+  return { badge, row };
 };
 
 const PlayerTable = ({
@@ -136,13 +138,13 @@ const PlayerTable = ({
     );
   };
 
-  const [openNoteId, setOpenNoteId] = React.useState(null);
-  const [drafts, setDrafts] = React.useState({});
-  const [savingId, setSavingId] = React.useState(null);
-  const [saveError, setSaveError] = React.useState(null);
-  const tableRef = React.useRef(null);
+  const [openNoteId, setOpenNoteId] = useState(null);
+  const [drafts, setDrafts] = useState({});
+  const [savingId, setSavingId] = useState(null);
+  const [saveError, setSaveError] = useState(null);
+  const tableRef = useRef(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleClickOutside = (e) => {
       if (!tableRef.current) return;
       if (!tableRef.current.contains(e.target)) {
@@ -178,208 +180,251 @@ const PlayerTable = ({
             <td colSpan={columns.length}>No data available.</td>
           </tr>
         )}
-        {rows.map((row) => (
-          <tr key={row.player_id}>
-            <td style={{ width: columnWidthHints["player_name"] }}>
-              {row.player_id ? (
-                <a
-                  href={`https://foe.scoredb.io/DE14/Player/${row.player_id}/Overview`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="player-link"
-                >
-                  {row.player_name ?? "-"}
-                </a>
-              ) : (
-                row.player_name ?? "-"
-              )}
-            </td>
+        {rows.map((row) => {
+          const colorSet = showInvitation
+            ? invitationColors(row.recruitment_last_contacted_at)
+            : { badge: undefined, row: undefined };
+          const rowStyle = colorSet.row
+            ? { backgroundColor: colorSet.row }
+            : undefined;
+          const isEmptyInvitation = !row.recruitment_status;
 
-            <td style={{ width: columnWidthHints["guild_name"] }}>
-              {row.guild_name ? (
-                <button
-                  type="button"
-                  className="player-link"
-                  onClick={() =>
-                    onGuildClick && onGuildClick(row.guild_id, row.guild_name)
-                  }
-                >
-                  {row.guild_name}
-                </button>
-              ) : (
-                "-"
-              )}
-            </td>
+          return (
+            <tr key={row.player_id} style={rowStyle}>
+              <td style={{ width: columnWidthHints["player_name"] }}>
+                {row.player_id ? (
+                  <a
+                    href={`https://foe.scoredb.io/DE14/Player/${row.player_id}/Overview`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="player-link"
+                  >
+                    {row.player_name ?? "-"}
+                  </a>
+                ) : (
+                  row.player_name ?? "-"
+                )}
+              </td>
 
-            <td style={{ width: columnWidthHints["era_nr"] }}>
-              {row.era ?? "-"}
-            </td>
-
-            <td style={{ width: columnWidthHints["points"] }}>
-              {row.points != null ? row.points.toLocaleString() : "-"}
-            </td>
-
-            <td style={{ width: columnWidthHints["battles"] }}>
-              {row.battles != null ? row.battles.toLocaleString() : "-"}
-            </td>
-
-            <td style={{ width: columnWidthHints["battles_diff"] }}>
-              {row.battles_diff == null ? (
-                <span className="foe-badge-missing">-</span>
-              ) : row.battles_diff === 0 ? (
-                <span className="foe-badge-zero">0</span>
-              ) : (
-                <span className="foe-badge-positive">
-                  {row.battles_diff > 0 ? "+" : ""}
-                  {row.battles_diff.toLocaleString()}
-                </span>
-              )}
-            </td>
-
-            {showInvitation && (
-              <td style={{ width: columnWidthHints["recruitment_status"] }}>
-                <div className="invitation-cell">
+              <td style={{ width: columnWidthHints["guild_name"] }}>
+                {row.guild_name ? (
                   <button
                     type="button"
-                    className="invitation-badge"
-                    style={{
-                      backgroundColor: invitationColor(
-                        row.recruitment_last_contacted_at
-                      ),
-                    }}
-                    onClick={() => {
-                      const nextId =
-                        openNoteId === row.player_id ? null : row.player_id;
-                      setOpenNoteId(nextId);
-                      if (nextId) {
-                        setDrafts((prev) => ({
-                          ...prev,
-                          [row.player_id]: {
-                            recruitment_status: row.recruitment_status || "",
-                            recruitment_note: row.recruitment_note || "",
-                            recruitment_last_contacted_at:
-                              row.recruitment_last_contacted_at || "",
-                          },
-                        }));
-                      }
-                    }}
+                    className="player-link"
+                    onClick={() =>
+                      onGuildClick && onGuildClick(row.guild_id, row.guild_name)
+                    }
                   >
-                    {row.recruitment_status || "Set status"}
+                    {row.guild_name}
                   </button>
-                  {openNoteId === row.player_id && (
-                    <div className="invitation-popover">
-                      <label className="invitation-popover__label">
-                        Status
-                        <select
-                          value={
-                            drafts[row.player_id]?.recruitment_status || ""
-                          }
-                          onChange={(e) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [row.player_id]: {
-                                ...(prev[row.player_id] || {}),
-                                recruitment_status: e.target.value,
-                              },
-                            }))
-                          }
-                        >
-                          <option value="">(none)</option>
-                          <option value="fresh">fresh</option>
-                          <option value="ignored">ignored</option>
-                          <option value="declined">declined</option>
-                        </select>
-                      </label>
+                ) : (
+                  "-"
+                )}
+              </td>
 
-                      <label className="invitation-popover__label">
-                        Last contacted
-                        <input
-                          type="date"
-                          value={
-                            drafts[row.player_id]
-                              ?.recruitment_last_contacted_at || ""
-                          }
-                          onChange={(e) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [row.player_id]: {
-                                ...(prev[row.player_id] || {}),
-                                recruitment_last_contacted_at: e.target.value,
-                              },
-                            }))
-                          }
-                        />
-                      </label>
+              <td style={{ width: columnWidthHints["era_nr"] }}>
+                {row.era ?? "-"}
+              </td>
 
-                      <label className="invitation-popover__label">
-                        Notes
-                        <textarea
-                          rows={3}
-                          value={
-                            drafts[row.player_id]?.recruitment_note || ""
-                          }
-                          onChange={(e) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [row.player_id]: {
-                                ...(prev[row.player_id] || {}),
-                                recruitment_note: e.target.value,
-                              },
-                            }))
-                          }
-                        />
-                      </label>
+              <td style={{ width: columnWidthHints["points"] }}>
+                {row.points != null ? row.points.toLocaleString() : "-"}
+              </td>
 
-                      {saveError && (
-                        <div className="invitation-popover__error">
-                          {saveError}
-                        </div>
-                      )}
+              <td style={{ width: columnWidthHints["battles"] }}>
+                {row.battles != null ? row.battles.toLocaleString() : "-"}
+              </td>
 
-                      <div className="invitation-popover__actions">
-                        <button
-                          type="button"
-                          className="btn-pill btn-ghost"
-                          onClick={() => {
-                            setOpenNoteId(null);
-                            setSaveError(null);
-                          }}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-pill"
-                          disabled={savingId === row.player_id}
+              <td style={{ width: columnWidthHints["battles_diff"] }}>
+                {row.battles_diff == null ? (
+                  <span className="foe-badge-missing">-</span>
+                ) : row.battles_diff === 0 ? (
+                  <span className="foe-badge-zero">0</span>
+                ) : (
+                  <span className="foe-badge-positive">
+                    {row.battles_diff > 0 ? "+" : ""}
+                    {row.battles_diff.toLocaleString()}
+                  </span>
+                )}
+              </td>
+
+              {showInvitation && (
+                <td style={{ width: columnWidthHints["recruitment_status"] }}>
+                  <div className="invitation-cell">
+                    <button
+                      type="button"
+                      className={
+                        "invitation-badge" +
+                        (isEmptyInvitation ? " invitation-badge--empty" : "")
+                      }
+                      style={{
+                        backgroundColor: isEmptyInvitation
+                          ? undefined
+                          : colorSet.badge,
+                      }}
+                      onClick={() => {
+                        const nextId =
+                          openNoteId === row.player_id ? null : row.player_id;
+                        setOpenNoteId(nextId);
+                        if (nextId) {
+                          setDrafts((prev) => ({
+                            ...prev,
+                            [row.player_id]: {
+                              recruitment_status: row.recruitment_status || "",
+                              recruitment_note: row.recruitment_note || "",
+                              recruitment_last_contacted_at:
+                                row.recruitment_last_contacted_at || "",
+                            },
+                          }));
+                        }
+                      }}
+                    >
+                      {row.recruitment_status || "Set status"}
+                    </button>
+                    {openNoteId === row.player_id && (
+                      <div className="invitation-popover">
+                        <label className="invitation-popover__label">
+                          Status
+                          <select
+                            value={
+                              drafts[row.player_id]?.recruitment_status || ""
+                            }
+                            onChange={(e) =>
+                              setDrafts((prev) => ({
+                                ...prev,
+                                [row.player_id]: {
+                                  ...(prev[row.player_id] || {}),
+                                  recruitment_status: e.target.value,
+                                },
+                              }))
+                            }
+                          >
+                            <option value="">(none)</option>
+                            <option value="zweitwelt">zweitwelt</option>
+                            <option value="fresh">fresh</option>
+                            <option value="ignored">ignored</option>
+                            <option value="declined">declined</option>
+                          </select>
+                        </label>
+
+                        <label className="invitation-popover__label">
+                          Last contacted
+                          <input
+                            type="date"
+                            value={
+                              drafts[row.player_id]
+                                ?.recruitment_last_contacted_at || ""
+                            }
+                            onChange={(e) =>
+                              setDrafts((prev) => ({
+                                ...prev,
+                                [row.player_id]: {
+                                  ...(prev[row.player_id] || {}),
+                                  recruitment_last_contacted_at: e.target.value,
+                                },
+                              }))
+                            }
+                          />
+                          <button
+                            type="button"
+                            className="refresh-date"
+                            onClick={() => {
+                              const today = new Date()
+                                .toISOString()
+                                .slice(0, 10);
+                              setDrafts((prev) => ({
+                                ...prev,
+                                [row.player_id]: {
+                                  ...(prev[row.player_id] || {}),
+                                  recruitment_last_contacted_at: today,
+                                },
+                              }));
+                            }}
+                          >
+                            Today
+                          </button>
+                        </label>
+
+                        <label className="invitation-popover__label">
+                          Notes
+                          <textarea
+                            rows={3}
+                            value={
+                              drafts[row.player_id]?.recruitment_note || ""
+                            }
+                            onChange={(e) =>
+                              setDrafts((prev) => ({
+                                ...prev,
+                                [row.player_id]: {
+                                  ...(prev[row.player_id] || {}),
+                                  recruitment_note: e.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        </label>
+
+                        {saveError && (
+                          <div className="invitation-popover__error">
+                            {saveError}
+                          </div>
+                        )}
+
+                        <div className="invitation-popover__actions">
+                          <button
+                            type="button"
+                            className="btn-pill btn-ghost"
+                            onClick={() => {
+                              setOpenNoteId(null);
+                              setSaveError(null);
+                            }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-pill"
+                            disabled={savingId === row.player_id}
                           onClick={async () => {
                             if (!onRecruitmentUpdate) return;
-                            const draft = drafts[row.player_id] || {};
-                            setSavingId(row.player_id);
-                            setSaveError(null);
-                            try {
-                              await onRecruitmentUpdate(row.player_id, draft, {
-                                snapshotId,
-                              });
+                              const draft = drafts[row.player_id] || {};
+                              const payload = {
+                                recruitment_status:
+                                  draft.recruitment_status ?? "",
+                                recruitment_note: draft.recruitment_note ?? "",
+                                recruitment_last_contacted_at:
+                                  draft.recruitment_last_contacted_at ?? "",
+                              };
+                              setSavingId(row.player_id);
+                              setSaveError(null);
+                              try {
+                              await onRecruitmentUpdate(
+                                row.player_id,
+                                payload,
+                                {
+                                  snapshotId,
+                                }
+                              );
                               setOpenNoteId(null);
                             } catch (err) {
                               setSaveError(
                                 err?.message || "Failed to save changes."
                               );
-                            } finally {
-                              setSavingId(null);
-                            }
-                          }}
-                        >
-                          {savingId === row.player_id ? "Saving..." : "Save"}
-                        </button>
+                              } finally {
+                                setSavingId(null);
+                              }
+                            }}
+                          >
+                            {savingId === row.player_id ? "Saving..." : "Save"}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              </td>
-            )}
-          </tr>
-        ))}
+                    )}
+                  </div>
+                </td>
+              )}
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );

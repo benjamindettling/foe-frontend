@@ -53,6 +53,16 @@ const SettingsPanel = ({
     onChange("excludedGuilds", next);
   };
 
+  const formatNumber = (val) => {
+    if (val === null || val === undefined || val === "") return "";
+    const num = Number(String(val).replace(/[',\s]/g, ""));
+    if (!Number.isFinite(num)) return val;
+    return num.toLocaleString("de-CH");
+  };
+
+  const sanitizeNumberInput = (value) =>
+    value.replace(/[^0-9-]/g, "");
+
   return (
     <div className="foe-settings-panel">
       <div className="foe-settings-header">
@@ -119,18 +129,22 @@ const SettingsPanel = ({
         <label>Points</label>
         <div className="foe-range">
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            value={settings.minPoints ?? ""}
-            onChange={(e) => onChange("minPoints", e.target.value)}
+            value={formatNumber(settings.minPoints)}
+            onChange={(e) =>
+              onChange("minPoints", sanitizeNumberInput(e.target.value))
+            }
             placeholder="min"
           />
           <span>to</span>
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            value={settings.maxPoints ?? ""}
-            onChange={(e) => onChange("maxPoints", e.target.value)}
+            value={formatNumber(settings.maxPoints)}
+            onChange={(e) =>
+              onChange("maxPoints", sanitizeNumberInput(e.target.value))
+            }
             placeholder="max"
           />
         </div>
@@ -140,18 +154,22 @@ const SettingsPanel = ({
         <label>Battles</label>
         <div className="foe-range">
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            value={settings.minBattles ?? ""}
-            onChange={(e) => onChange("minBattles", e.target.value)}
+            value={formatNumber(settings.minBattles)}
+            onChange={(e) =>
+              onChange("minBattles", sanitizeNumberInput(e.target.value))
+            }
             placeholder="min"
           />
           <span>to</span>
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            value={settings.maxBattles ?? ""}
-            onChange={(e) => onChange("maxBattles", e.target.value)}
+            value={formatNumber(settings.maxBattles)}
+            onChange={(e) =>
+              onChange("maxBattles", sanitizeNumberInput(e.target.value))
+            }
             placeholder="max"
           />
         </div>
@@ -161,18 +179,22 @@ const SettingsPanel = ({
         <label>Battles Diff</label>
         <div className="foe-range">
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            value={settings.minBattlesDiff ?? ""}
-            onChange={(e) => onChange("minBattlesDiff", e.target.value)}
+            value={formatNumber(settings.minBattlesDiff)}
+            onChange={(e) =>
+              onChange("minBattlesDiff", sanitizeNumberInput(e.target.value))
+            }
             placeholder="min"
           />
           <span>to</span>
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            value={settings.maxBattlesDiff ?? ""}
-            onChange={(e) => onChange("maxBattlesDiff", e.target.value)}
+            value={formatNumber(settings.maxBattlesDiff)}
+            onChange={(e) =>
+              onChange("maxBattlesDiff", sanitizeNumberInput(e.target.value))
+            }
             placeholder="max"
           />
         </div>
