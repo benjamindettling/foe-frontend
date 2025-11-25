@@ -66,32 +66,3 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
-.sort-indicator {
-  display: inline-flex;
-  flex-direction: column;
-  margin-left: 0.25rem;
-  font-size: 0.7rem;
-}
-
-.sort-icon {
-  cursor: pointer;
-  line-height: 1;
-  user-select: none;
-}
-
-.sort-icon.active {
-  font-weight: 700;
-  text-decoration: underline;
-}
-
-.header-label {
-  vertical-align: middle;
-}
-
-.player-link {
-  text-decoration: none;
-}
-
-.player-link:hover {
-  text-decoration: underline;
-}

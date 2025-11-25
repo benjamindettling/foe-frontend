@@ -25,5 +25,26 @@ export async function fetchSnapshots() {
  */
 export async function fetchPlayersBySnapshot(snapshotId) {
   const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/players`);
+  const data = await handleJsonResponse(res);
+
+  // Normalize possible response shapes
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.players)) return data.players;
+  if (Array.isArray(data?.rows)) return data.rows;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+}
+
+/**
+ * Update recruitment info for a player.
+ * Backend needs to accept PUT/PATCH body:
+ *   { recruitment_status, recruitment_note, recruitment_last_contacted_at }
+ */
+export async function updateRecruitmentStatus(playerId, payload) {
+  const res = await fetch(`${API_BASE}/players/${playerId}/recruitment`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   return handleJsonResponse(res);
 }

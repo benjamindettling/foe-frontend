@@ -1,45 +1,115 @@
 // src/components/FoeDashboard.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { fetchSnapshots, fetchPlayersBySnapshot } from "../api/foeApi";
+import {
+  fetchPlayersBySnapshot,
+  fetchSnapshots,
+  updateRecruitmentStatus,
+} from "../api/foeApi";
 import PlayerTable from "./PlayerTable";
-import ComparisonSelector from "./ComparisonSelector";
+import SettingsPanel from "./SettingsPanel";
+
+const DEFAULT_SORT = { key: "points", direction: "desc" };
+
+const ERA_ORDER = [
+  "IronAge",
+  "EarlyMiddleAge",
+  "HighMiddleAge",
+  "LateMiddleAge",
+  "ColonialAge",
+  "IndustrialAge",
+  "ProgressiveEra",
+  "ModernEra",
+  "PostModernEra",
+  "ContemporaryEra",
+  "TomorrowEra",
+  "FutureEra",
+  "ArcticFuture",
+  "OceanicFuture",
+  "VirtualFuture",
+  "SpaceAgeMars",
+  "SpaceAgeAsteroidBelt",
+  "SpaceAgeVenus",
+  "SpaceAgeJupiterMoon",
+  "SpaceAgeTitan",
+  "SpaceAgeSpaceHub",
+];
+
+const makeDefaultSettings = (snapshotId) => ({
+  snapshotId: snapshotId ?? "",
+  comparisonSnapshotId: "",
+  minEra: "",
+  minPoints: "",
+  maxPoints: "",
+  minBattles: "",
+  maxBattles: "",
+  minBattlesDiff: "",
+  maxBattlesDiff: "",
+  excludedGuilds: [],
+  showInvitation: false,
+  invitationCutoff: "",
+  excludeContacted: false,
+});
+
+const normalizeSettings = (draft) => ({
+  ...draft,
+  excludedGuilds: Array.from(
+    new Set((draft.excludedGuilds || []).filter(Boolean))
+  ),
+});
+
+const parseNumber = (val) => {
+  if (val === "" || val === null || val === undefined) return null;
+  const num = Number(val);
+  return Number.isFinite(num) ? num : null;
+};
+
+const normalizeGuildName = (name) => {
+  if (!name) return "";
+  return name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .toLowerCase();
+};
 
 const FoeDashboard = () => {
   const [snapshots, setSnapshots] = useState([]);
-  const [currentSnapshotId, setCurrentSnapshotId] = useState(null);
-
-  // cache: snapshotId -> rows
   const [playerCache, setPlayerCache] = useState(new Map());
-
-  const [comparisonDays, setComparisonDays] = useState(null); // integer or null
-  const [isLoading, setIsLoading] = useState(false);
+  const [tabs, setTabs] = useState([]);
+  const [activeTabId, setActiveTabId] = useState("all");
+  const [settingsDraft, setSettingsDraft] = useState(null);
+  const [loadingSnapshotIds, setLoadingSnapshotIds] = useState(new Set());
   const [error, setError] = useState(null);
 
-  // sort state for table
-  const [sortConfig, setSortConfig] = useState({
-    key: "points",
-    direction: "desc",
-  });
+  const activeTab = useMemo(
+    () => tabs.find((t) => t.id === activeTabId) || tabs[0],
+    [tabs, activeTabId]
+  );
 
-  // --- load snapshots on mount ---
+  // Initial snapshot load
   useEffect(() => {
     const loadSnapshots = async () => {
       try {
-        setError(null);
         const data = await fetchSnapshots();
-        if (!data || data.length === 0) {
-          setSnapshots([]);
-          setCurrentSnapshotId(null);
-          return;
-        }
-
-        // assume API returns newest first; if not, sort by captured_at descending:
         const sorted = [...data].sort(
           (a, b) => new Date(b.captured_at) - new Date(a.captured_at)
         );
-
         setSnapshots(sorted);
-        setCurrentSnapshotId(sorted[0].id);
+
+        if (sorted.length && tabs.length === 0) {
+          const baseSettings = makeDefaultSettings(sorted[0].id);
+          setTabs([
+            {
+              id: "all",
+              label: "All Players",
+              type: "all",
+              sortConfig: DEFAULT_SORT,
+              settings: baseSettings,
+            },
+          ]);
+          setActiveTabId("all");
+          setSettingsDraft(baseSettings);
+        }
       } catch (err) {
         console.error(err);
         setError("Failed to load snapshots.");
@@ -47,166 +117,475 @@ const FoeDashboard = () => {
     };
 
     loadSnapshots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- whenever current snapshot changes, ensure its rows are loaded ---
+  // Ensure required snapshot datasets are loaded
   useEffect(() => {
-    const loadPlayers = async () => {
-      if (!currentSnapshotId) return;
-      if (playerCache.has(currentSnapshotId)) return; // already loaded
+    const neededIds = new Set();
+    tabs.forEach((tab) => {
+      if (tab.settings?.snapshotId) {
+        neededIds.add(Number(tab.settings.snapshotId));
+      }
+      if (tab.settings?.comparisonSnapshotId) {
+        neededIds.add(Number(tab.settings.comparisonSnapshotId));
+      }
+    });
 
-      try {
-        setIsLoading(true);
-        setError(null);
+    neededIds.forEach((id) => {
+      if (!Number.isFinite(id)) return;
+      if (playerCache.has(id)) return;
+      if (loadingSnapshotIds.has(id)) return;
 
-        const rows = await fetchPlayersBySnapshot(currentSnapshotId);
+      setLoadingSnapshotIds((prev) => new Set(prev).add(id));
+      fetchPlayersBySnapshot(id)
+        .then((rows) => {
+          const normalized = Array.isArray(rows) ? rows : [];
+          setPlayerCache((prev) => {
+            const next = new Map(prev);
+            next.set(id, normalized);
+            return next;
+          });
+        })
+        .catch((err) => {
+          console.error(err);
+          setError("Failed to load player data.");
+        })
+        .finally(() => {
+          setLoadingSnapshotIds((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        });
+    });
+  }, [tabs, playerCache, loadingSnapshotIds]);
 
+  // Explicitly load active snapshot rows if missing
+  useEffect(() => {
+    const id = Number(activeTab?.settings?.snapshotId);
+    if (!Number.isFinite(id)) return;
+    if (playerCache.has(id) || loadingSnapshotIds.has(id)) return;
+
+    setLoadingSnapshotIds((prev) => new Set(prev).add(id));
+    fetchPlayersBySnapshot(id)
+      .then((rows) => {
+        const normalized = Array.isArray(rows) ? rows : [];
         setPlayerCache((prev) => {
           const next = new Map(prev);
-          next.set(currentSnapshotId, rows);
+          next.set(id, normalized);
           return next;
         });
-      } catch (err) {
+      })
+      .catch((err) => {
         console.error(err);
         setError("Failed to load player data.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadPlayers();
-  }, [currentSnapshotId, playerCache]);
-
-  const currentSnapshot = useMemo(
-    () => snapshots.find((s) => s.id === currentSnapshotId) ?? null,
-    [snapshots, currentSnapshotId]
-  );
-
-  // --- compute available comparison day options from snapshots ---
-  const comparisonOptions = useMemo(() => {
-    if (!currentSnapshot) return [];
-
-    const baseDate = new Date(currentSnapshot.captured_at);
-    const optionsSet = new Set();
-
-    snapshots.forEach((s) => {
-      const diffMs = baseDate - new Date(s.captured_at);
-      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-      if (diffDays > 0) {
-        optionsSet.add(diffDays);
-      }
-    });
-
-    return Array.from(optionsSet).sort((a, b) => a - b);
-  }, [snapshots, currentSnapshot]);
-
-  // --- find snapshot matching current comparisonDays ---
-  const comparisonSnapshot = useMemo(() => {
-    if (!currentSnapshot || comparisonDays == null) return null;
-
-    const baseDate = new Date(currentSnapshot.captured_at);
-
-    // pick snapshot whose day-diff equals comparisonDays
-    return (
-      snapshots.find((s) => {
-        const diffMs = baseDate - new Date(s.captured_at);
-        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-        return diffDays === comparisonDays;
-      }) ?? null
-    );
-  }, [snapshots, currentSnapshot, comparisonDays]);
-
-  // --- ensure comparison snapshot rows are loaded when needed ---
-  useEffect(() => {
-    const loadComparison = async () => {
-      if (!comparisonSnapshot) return;
-      if (playerCache.has(comparisonSnapshot.id)) return;
-
-      try {
-        setIsLoading(true);
-        setError(null);
-        const rows = await fetchPlayersBySnapshot(comparisonSnapshot.id);
-        setPlayerCache((prev) => {
-          const next = new Map(prev);
-          next.set(comparisonSnapshot.id, rows);
+      })
+      .finally(() => {
+        setLoadingSnapshotIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
           return next;
         });
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load comparison data.");
-      } finally {
-        setIsLoading(false);
+      });
+  }, [activeTab, playerCache, loadingSnapshotIds]);
+
+  // Keep settings draft aligned with active tab
+  useEffect(() => {
+    if (activeTab?.settings) {
+      setSettingsDraft(activeTab.settings);
+    }
+  }, [activeTab]);
+
+  const activeSnapshot = useMemo(
+    () =>
+      snapshots.find(
+        (s) => Number(s.id) === Number(activeTab?.settings?.snapshotId)
+      ),
+    [snapshots, activeTab]
+  );
+
+  const baseRows = useMemo(() => {
+    const id = Number(activeTab?.settings?.snapshotId);
+    if (!Number.isFinite(id)) return [];
+    return playerCache.get(id) || [];
+  }, [playerCache, activeTab]);
+
+  const comparisonRows = useMemo(() => {
+    const id = Number(activeTab?.settings?.comparisonSnapshotId);
+    if (!Number.isFinite(id)) return null;
+    return playerCache.get(id) || null;
+  }, [playerCache, activeTab]);
+
+  const comparisonOptions = useMemo(() => {
+    if (!activeSnapshot) return [];
+    const baseDate = new Date(activeSnapshot.captured_at);
+
+    return snapshots
+      .filter((s) => Number(s.id) !== Number(activeSnapshot.id))
+      .map((s) => {
+        const diffMs = baseDate - new Date(s.captured_at);
+        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        const label =
+          diffDays >= 0
+            ? `${diffDays} day${diffDays === 1 ? "" : "s"} ago`
+            : `${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? "" : "s"} ahead`;
+        return { id: s.id, label, diffDays };
+      })
+      .sort((a, b) => a.diffDays - b.diffDays);
+  }, [snapshots, activeSnapshot]);
+
+  const availableGuilds = useMemo(() => {
+    const seen = new Map();
+    baseRows.forEach((row) => {
+      if (!row.guild_name) return;
+      const key = normalizeGuildName(row.guild_name);
+      if (!seen.has(key)) {
+        seen.set(key, row.guild_name);
+      }
+    });
+    return Array.from(seen.values()).sort();
+  }, [baseRows]);
+
+  const tabRows = useMemo(() => {
+    if (!activeTab) return [];
+    if (activeTab.type !== "guild") return baseRows;
+
+    const targetGuildId = activeTab.guildId;
+    const targetGuildName = activeTab.guildName;
+    return baseRows.filter((row) => {
+      if (targetGuildId != null && row.guild_id != null) {
+        return row.guild_id === targetGuildId;
+      }
+      if (targetGuildName) {
+        return row.guild_name === targetGuildName;
+      }
+      return false;
+    });
+  }, [activeTab, baseRows]);
+
+  const filteredRows = useMemo(() => {
+    if (!activeTab?.settings) return tabRows;
+    const settings = activeTab.settings;
+
+    const minEra = parseNumber(settings.minEra);
+    const minPoints = parseNumber(settings.minPoints);
+    const maxPoints = parseNumber(settings.maxPoints);
+    const minBattles = parseNumber(settings.minBattles);
+    const maxBattles = parseNumber(settings.maxBattles);
+
+    const excludedSet = new Set(
+      (settings.excludedGuilds || []).map((g) => normalizeGuildName(g))
+    );
+    const cutoffDate =
+      settings.showInvitation && settings.invitationCutoff
+        ? new Date(settings.invitationCutoff)
+        : null;
+    const excludeContacted = !!settings.excludeContacted;
+
+    return tabRows.filter((row) => {
+      if (minEra != null) {
+        const eraNr = Number(row.era_nr);
+        if (!Number.isFinite(eraNr) || eraNr < minEra) return false;
+      }
+
+      if (minPoints != null && !(row.points >= minPoints)) return false;
+      if (maxPoints != null && !(row.points <= maxPoints)) return false;
+
+      if (minBattles != null && !(row.battles >= minBattles)) return false;
+      if (maxBattles != null && !(row.battles <= maxBattles)) return false;
+
+      if (excludedSet.size) {
+        const name = normalizeGuildName(row.guild_name || "");
+        if (excludedSet.has(name)) return false;
+      }
+
+      if (excludeContacted && row.recruitment_last_contacted_at) {
+        return false;
+      }
+
+      if (cutoffDate && cutoffDate.toString() !== "Invalid Date") {
+        if (row.recruitment_last_contacted_at) {
+          const contacted = new Date(row.recruitment_last_contacted_at);
+          if (contacted.toString() !== "Invalid Date") {
+            // Exclude if contacted after cutoff (i.e., too recent)
+            if (contacted > cutoffDate) return false;
+          }
+        }
+      }
+
+      return true;
+    });
+  }, [activeTab, tabRows]);
+
+  const rowsWithDiff = useMemo(() => {
+    if (!comparisonRows) {
+      return filteredRows.map((row) => ({ ...row, battles_diff: null }));
+    }
+
+    const comparisonMap = new Map();
+    comparisonRows.forEach((r) => comparisonMap.set(r.player_id, r.battles));
+
+    return filteredRows.map((row) => {
+      const prev = comparisonMap.get(row.player_id);
+      const diff =
+        typeof prev === "number" ? Number(row.battles) - Number(prev) : null;
+      return { ...row, battles_diff: diff };
+    });
+  }, [filteredRows, comparisonRows]);
+
+  const fullyFilteredRows = useMemo(() => {
+    if (!activeTab?.settings) return rowsWithDiff;
+    const settings = activeTab.settings;
+    const minDiff = parseNumber(settings.minBattlesDiff);
+    const maxDiff = parseNumber(settings.maxBattlesDiff);
+
+    return rowsWithDiff.filter((row) => {
+      if (minDiff != null) {
+        if (row.battles_diff == null || row.battles_diff < minDiff) {
+          return false;
+        }
+      }
+      if (maxDiff != null) {
+        if (row.battles_diff == null || row.battles_diff > maxDiff) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [rowsWithDiff, activeTab]);
+
+  const sortedRows = useMemo(() => {
+    if (!activeTab) return [];
+    const { key, direction } = activeTab.sortConfig || DEFAULT_SORT;
+    const dir = direction === "asc" ? 1 : -1;
+
+    const mapInvitation = (row) => {
+      const date = row.recruitment_last_contacted_at;
+      if (!date) return Number.NEGATIVE_INFINITY; // never contacted comes first on asc
+      const ts = new Date(date).getTime();
+      return Number.isFinite(ts) ? ts : Number.NEGATIVE_INFINITY;
+    };
+
+    const rowsCopy = [...fullyFilteredRows];
+    rowsCopy.sort((a, b) => {
+      if (key === "recruitment_status") {
+        const aVal = mapInvitation(a);
+        const bVal = mapInvitation(b);
+        if (aVal === bVal) return 0;
+        return aVal < bVal ? -dir : dir;
+      }
+
+      const aVal = a[key];
+      const bVal = b[key];
+
+      if (typeof aVal === "number" && typeof bVal === "number") {
+        if (aVal === bVal) return 0;
+        return aVal < bVal ? -dir : dir;
+      }
+
+      const aStr = (aVal ?? "").toString().toLowerCase();
+      const bStr = (bVal ?? "").toString().toLowerCase();
+      if (aStr === bStr) return 0;
+      return aStr < bStr ? -dir : dir;
+    });
+
+    return rowsCopy;
+  }, [fullyFilteredRows, activeTab]);
+
+  const [displayRows, setDisplayRows] = useState([]);
+
+  // Progressive rendering: show first 20 rows instantly, then append in chunks
+  useEffect(() => {
+    if (!sortedRows || sortedRows.length === 0) {
+      setDisplayRows([]);
+      return;
+    }
+
+    const total = sortedRows.length;
+    const initial = Math.min(20, total);
+    const chunkSize = total > 2000 ? 500 : total > 200 ? 120 : 40;
+    const delay = total > 2000 ? 35 : 75;
+
+    let cancelled = false;
+    let current = initial;
+
+    setDisplayRows(sortedRows.slice(0, initial));
+
+    const step = () => {
+      if (cancelled || current >= total) return;
+      current = Math.min(current + chunkSize, total);
+      setDisplayRows(sortedRows.slice(0, current));
+      if (current < total) {
+        setTimeout(step, delay);
       }
     };
 
-    loadComparison();
-  }, [comparisonSnapshot, playerCache]);
-
-  const currentRows = useMemo(() => {
-    if (!currentSnapshotId) return [];
-    return playerCache.get(currentSnapshotId) ?? [];
-  }, [playerCache, currentSnapshotId]);
-
-  const comparisonRows = useMemo(() => {
-    if (!comparisonSnapshot) return null;
-    return playerCache.get(comparisonSnapshot.id) ?? null;
-  }, [playerCache, comparisonSnapshot]);
-
-  // --- compute battles_diff when comparison is selected ---
-  const rowsWithDiff = useMemo(() => {
-    if (!comparisonRows) {
-      return currentRows.map((row) => ({
-        ...row,
-        battles_diff: null,
-      }));
+    if (initial < total) {
+      setTimeout(step, delay);
     }
 
-    const prevByPlayer = new Map();
-    comparisonRows.forEach((r) => {
-      prevByPlayer.set(r.player_id, r.battles);
-    });
-
-    return currentRows.map((row) => {
-      const prevBattles = prevByPlayer.get(row.player_id);
-      let diff = null;
-
-      if (typeof prevBattles === "number") {
-        diff = row.battles - prevBattles;
-      }
-
-      return {
-        ...row,
-        battles_diff: diff,
-      };
-    });
-  }, [currentRows, comparisonRows]);
-
-  // --- sorted rows ---
-  const sortedRows = useMemo(() => {
-    const rows = [...rowsWithDiff];
-    if (!sortConfig.key) return rows;
-
-    return rows.sort((a, b) => {
-      const aVal = a[sortConfig.key] ?? 0;
-      const bVal = b[sortConfig.key] ?? 0;
-
-      if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
-      return 0;
-    });
-  }, [rowsWithDiff, sortConfig]);
+    return () => {
+      cancelled = true;
+    };
+  }, [sortedRows, activeTabId]);
 
   const handleSort = (column, direction) => {
-    setSortConfig((prev) => {
-      if (!direction) {
-        const nextDirection =
-          prev.key === column && prev.direction === "asc" ? "desc" : "asc";
-        return { key: column, direction: nextDirection };
-      }
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.id === activeTabId
+          ? {
+              ...tab,
+              sortConfig: { key: column, direction },
+            }
+          : tab
+      )
+    );
+  };
 
-      return { key: column, direction };
+  const handleGuildClick = (guildId, guildName) => {
+    const existing = tabs.find(
+      (t) => t.type === "guild" && t.guildId === guildId
+    );
+    if (existing) {
+      setActiveTabId(existing.id);
+      return;
+    }
+
+    const label = guildName || `Guild ${guildId ?? ""}`;
+    const baseSettings = normalizeSettings(
+      activeTab?.settings || makeDefaultSettings(snapshots[0]?.id)
+    );
+    baseSettings.excludedGuilds = [...baseSettings.excludedGuilds];
+
+    const newTab = {
+      id: `guild-${guildId ?? label}-${tabs.length + 1}`,
+      type: "guild",
+      guildId: guildId ?? null,
+      guildName: label,
+      label,
+      sortConfig: DEFAULT_SORT,
+      settings: baseSettings,
+    };
+
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+  };
+
+  const handleCloseTab = (tabId) => {
+    if (tabId === "all") return;
+    setTabs((prev) => prev.filter((t) => t.id !== tabId));
+    if (activeTabId === tabId) {
+      setActiveTabId("all");
+    }
+  };
+
+  const handleSettingsChange = (field, value) => {
+    const base =
+      settingsDraft ||
+      activeTab?.settings ||
+      makeDefaultSettings(activeTab?.settings?.snapshotId);
+    const next = { ...base, [field]: value };
+    const normalized = normalizeSettings(next);
+    setSettingsDraft(normalized);
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.id === activeTabId ? { ...tab, settings: normalized } : tab
+      )
+    );
+  };
+
+  const applySettingsToAll = () => {
+    const sourceSettings =
+      settingsDraft ||
+      activeTab?.settings ||
+      makeDefaultSettings(activeTab?.settings?.snapshotId);
+    const normalized = normalizeSettings(sourceSettings);
+    setTabs((prev) => prev.map((tab) => ({ ...tab, settings: normalized })));
+    setSettingsDraft(normalized);
+  };
+
+  const handleRecruitmentUpdate = async (playerId, updates) => {
+    const snapshotId = Number(activeTab?.settings?.snapshotId);
+    if (!Number.isFinite(snapshotId)) return;
+
+    await updateRecruitmentStatus(playerId, updates);
+
+    setPlayerCache((prev) => {
+      const next = new Map(prev);
+      const rows = next.get(snapshotId);
+      if (rows && Array.isArray(rows)) {
+        const updated = rows.map((r) =>
+          r.player_id === playerId ? { ...r, ...updates } : r
+        );
+        next.set(snapshotId, updated);
+      }
+      return next;
     });
   };
+
+  const applyPresetDefault = () => {
+    if (!activeTab) return;
+    const base = makeDefaultSettings(activeTab.settings?.snapshotId);
+    const normalized = normalizeSettings(base);
+    setSettingsDraft(normalized);
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.id === activeTab.id ? { ...tab, settings: normalized } : tab
+      )
+    );
+  };
+
+  const applyPresetRecruit = () => {
+    if (!activeTab) return;
+    const snapshotId = activeTab.settings?.snapshotId;
+
+    // pick comparison with >=14 days, otherwise the furthest available
+    let chosenComparison = "";
+    const sortedByDiff = [...(comparisonOptions || [])].sort(
+      (a, b) => a.diffDays - b.diffDays
+    );
+    const candidate = sortedByDiff.find((opt) => opt.diffDays >= 14);
+    chosenComparison = candidate
+      ? candidate.id
+      : sortedByDiff.length
+      ? sortedByDiff[sortedByDiff.length - 1].id
+      : "";
+
+    const futureEraIndex = ERA_ORDER.indexOf("FutureEra");
+    const preset = {
+      snapshotId: snapshotId ?? "",
+      comparisonSnapshotId: chosenComparison,
+      minEra: futureEraIndex >= 0 ? futureEraIndex + 1 : "",
+      minPoints: 10000000,
+      maxPoints: "",
+      minBattles: 10000,
+      maxBattles: "",
+      minBattlesDiff: "",
+      maxBattlesDiff: "",
+      excludedGuilds: [],
+      showInvitation: true,
+      invitationCutoff: "",
+      excludeContacted: true,
+    };
+    const normalized = normalizeSettings(preset);
+
+    setSettingsDraft(normalized);
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.id === activeTab.id
+          ? { ...tab, settings: normalized, sortConfig: { key: "battles_diff", direction: "desc" } }
+          : tab
+      )
+    );
+  };
+
+  const isBaseLoading =
+    activeTab?.settings?.snapshotId &&
+    !playerCache.has(Number(activeTab.settings.snapshotId));
+  const isComparisonLoading =
+    activeTab?.settings?.comparisonSnapshotId &&
+    !playerCache.has(Number(activeTab.settings.comparisonSnapshotId));
 
   return (
     <section id="foe-section">
@@ -214,60 +593,95 @@ const FoeDashboard = () => {
         <div className="foe-header">
           <h1>Forge of Empires Player Stats</h1>
           <p>
-            {currentSnapshot
-              ? `Snapshot: ${new Date(
-                  currentSnapshot.captured_at
-                ).toLocaleString()}`
-              : "Loading snapshot info..."}
+            {activeSnapshot
+              ? `Dataset: ${new Date(
+                  activeSnapshot.captured_at
+                ).toLocaleString()} (${activeSnapshot.label})`
+              : "Pick a dataset to get started"}
           </p>
         </div>
 
-        <div className="foe-controls">
-          <div className="foe-controls__group">
-            <label htmlFor="snapshot-select">Dataset:</label>
-            <select
-              id="snapshot-select"
-              value={currentSnapshotId ?? ""}
-              onChange={(e) =>
-                setCurrentSnapshotId(
-                  e.target.value ? Number(e.target.value) : null
-                )
+        <div className="foe-tabs">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={
+                "foe-tab" + (tab.id === activeTabId ? " foe-tab--active" : "")
               }
+              onClick={() => setActiveTabId(tab.id)}
             >
-              {snapshots.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {new Date(s.captured_at).toLocaleString()} ({s.label})
-                </option>
-              ))}
-            </select>
-          </div>
+              <span className="foe-tab__label">{tab.label}</span>
+              {tab.type === "guild" && (
+                <span
+                  className="foe-tab__close"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCloseTab(tab.id);
+                  }}
+                >
+                  x
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
 
-          <div className="foe-controls__group">
-            <ComparisonSelector
-              options={comparisonOptions}
-              value={comparisonDays}
-              onChange={setComparisonDays}
+        {error && <p style={{ color: "red" }}>{error}</p>}
+
+        <div className="foe-layout">
+          {settingsDraft && (
+            <SettingsPanel
+              snapshots={snapshots}
+              settings={settingsDraft}
+              onChange={handleSettingsChange}
+              onApplyAll={applySettingsToAll}
+              onPresetDefault={applyPresetDefault}
+              onPresetRecruit={applyPresetRecruit}
+              availableGuilds={availableGuilds}
+              isBusy={isBaseLoading || isComparisonLoading}
+              eraOptions={ERA_ORDER.map((name, idx) => ({
+                value: idx + 1,
+                label: name,
+              }))}
+              comparisonOptions={comparisonOptions}
+              onToggleInvitation={(checked) =>
+                handleSettingsChange("showInvitation", checked)
+              }
             />
+          )}
+
+          <div className="foe-table-area">
+            <div className="foe-table-meta">
+              <span>
+                Showing {displayRows.length.toLocaleString()} of{" "}
+                {sortedRows.length.toLocaleString()} rows
+              </span>
+              {isBaseLoading && <span className="pill pill-warn">Loading...</span>}
+              {isComparisonLoading && (
+                <span className="pill pill-ghost">Loading comparison...</span>
+              )}
+            </div>
+
+            <div className="foe-table-wrapper">
+              <PlayerTable
+                rows={displayRows}
+                allRows={sortedRows}
+                onSort={handleSort}
+                sortConfig={activeTab?.sortConfig || DEFAULT_SORT}
+                onGuildClick={handleGuildClick}
+                showInvitation={!!(activeTab?.settings?.showInvitation)}
+                onRecruitmentUpdate={handleRecruitmentUpdate}
+                snapshotId={activeTab?.settings?.snapshotId}
+              />
+            </div>
+
+            {activeTab?.settings?.comparisonSnapshotId && (
+              <p className="foe-legend">
+                Battles Diff = Battles in dataset - Battles in comparison dataset.
+              </p>
+            )}
           </div>
         </div>
-
-        {error && <p style={{ color: "red", marginBottom: "1rem" }}>{error}</p>}
-
-        <div className="foe-table-wrapper">
-          <PlayerTable
-            rows={sortedRows}
-            onSort={handleSort}
-            sortConfig={sortConfig}
-          />
-        </div>
-
-        {comparisonSnapshot && (
-          <p
-            style={{ marginTop: "0.75rem", fontSize: "0.85rem", color: "#fff" }}
-          >
-            battles_diff = battles today − battles {comparisonDays} days ago.
-          </p>
-        )}
       </div>
     </section>
   );
