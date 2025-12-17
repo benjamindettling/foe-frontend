@@ -29,6 +29,24 @@ const invitationColors = (dateStr) => {
   return { badge, row };
 };
 
+const formatRecruitmentStatus = (status) => {
+  if (!status) return "";
+  switch (status.toLowerCase()) {
+    case "fresh":
+      return "frisch";
+    case "ignored":
+      return "ignoriert";
+    case "declined":
+      return "abgelehnt";
+    case "zweitwelt":
+      return "Zweitwelt";
+    case "schwach":
+      return "Schwach";
+    default:
+      return status;
+  }
+};
+
 const PlayerTable = ({
   rows,
   allRows,
@@ -181,9 +199,20 @@ const PlayerTable = ({
           </tr>
         )}
         {rows.map((row) => {
-          const colorSet = showInvitation
+          const baseColorSet = showInvitation
             ? invitationColors(row.recruitment_last_contacted_at)
             : { badge: undefined, row: undefined };
+
+          const statusKey = (row.recruitment_status || "").toLowerCase();
+
+          // Keep the row tint by age, but override badge color for "Schwach"
+          let colorSet = baseColorSet;
+          if (statusKey === "schwach") {
+            colorSet = {
+              ...baseColorSet,
+              badge: "#8B4513", // brown
+            };
+          }
           const rowStyle = colorSet.row
             ? { backgroundColor: colorSet.row }
             : undefined;
@@ -278,8 +307,11 @@ const PlayerTable = ({
                         }
                       }}
                     >
-                      {row.recruitment_status || "Set status"}
+                      {row.recruitment_status
+                        ? formatRecruitmentStatus(row.recruitment_status)
+                        : "Status setzen"}
                     </button>
+
                     {openNoteId === row.player_id && (
                       <div className="invitation-popover">
                         <label className="invitation-popover__label">
@@ -303,6 +335,7 @@ const PlayerTable = ({
                             <option value="fresh">fresh</option>
                             <option value="ignored">ignored</option>
                             <option value="declined">declined</option>
+                            <option value="schwach">schwach</option>
                           </select>
                         </label>
 
@@ -384,8 +417,8 @@ const PlayerTable = ({
                             type="button"
                             className="btn-pill"
                             disabled={savingId === row.player_id}
-                          onClick={async () => {
-                            if (!onRecruitmentUpdate) return;
+                            onClick={async () => {
+                              if (!onRecruitmentUpdate) return;
                               const draft = drafts[row.player_id] || {};
                               const payload = {
                                 recruitment_status:
@@ -397,18 +430,18 @@ const PlayerTable = ({
                               setSavingId(row.player_id);
                               setSaveError(null);
                               try {
-                              await onRecruitmentUpdate(
-                                row.player_id,
-                                payload,
-                                {
-                                  snapshotId,
-                                }
-                              );
-                              setOpenNoteId(null);
-                            } catch (err) {
-                              setSaveError(
-                                err?.message || "Failed to save changes."
-                              );
+                                await onRecruitmentUpdate(
+                                  row.player_id,
+                                  payload,
+                                  {
+                                    snapshotId,
+                                  }
+                                );
+                                setOpenNoteId(null);
+                              } catch (err) {
+                                setSaveError(
+                                  err?.message || "Failed to save changes."
+                                );
                               } finally {
                                 setSavingId(null);
                               }

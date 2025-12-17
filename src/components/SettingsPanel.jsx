@@ -18,8 +18,8 @@ const SettingsPanel = ({
   eraOptions,
   comparisonOptions,
   onToggleInvitation,
-  onPresetDefault,
-  onPresetRecruit,
+  presets,
+  onApplyPreset,
 }) => {
   const [guildQuery, setGuildQuery] = useState("");
 
@@ -32,9 +32,7 @@ const SettingsPanel = ({
     if (!availableGuilds || availableGuilds.length === 0) return [];
 
     const list = needle
-      ? availableGuilds.filter((name) =>
-          normalizeGuild(name).includes(needle)
-        )
+      ? availableGuilds.filter((name) => normalizeGuild(name).includes(needle))
       : availableGuilds;
 
     return list.slice(0, 10);
@@ -60,8 +58,7 @@ const SettingsPanel = ({
     return num.toLocaleString("de-CH");
   };
 
-  const sanitizeNumberInput = (value) =>
-    value.replace(/[^0-9-]/g, "");
+  const sanitizeNumberInput = (value) => value.replace(/[^0-9-]/g, "");
 
   return (
     <div className="foe-settings-panel">
@@ -111,7 +108,7 @@ const SettingsPanel = ({
       </div>
 
       <div className="foe-settings-group foe-settings-grid">
-        <label>Era >=</label>
+        <label>Era &gt;=</label>
         <select
           value={settings.minEra ?? ""}
           onChange={(e) => onChange("minEra", e.target.value)}
@@ -272,22 +269,20 @@ const SettingsPanel = ({
 
       <div className="foe-settings-group">
         <div className="foe-settings-actions">
-          <button
-            type="button"
-            className="btn-pill btn-ghost"
-            onClick={onPresetDefault}
-            disabled={isBusy}
-          >
-            Default
-          </button>
-          <button
-            type="button"
-            className="btn-pill"
-            onClick={onPresetRecruit}
-            disabled={isBusy}
-          >
-            Recruit
-          </button>
+          {(presets || []).map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              className={
+                // Make the first preset look "ghost" and others primary, purely stylistic.
+                preset.id === "recruit" ? "btn-pill" : "btn-pill btn-ghost"
+              }
+              onClick={() => onApplyPreset?.(preset.id)}
+              disabled={isBusy}
+            >
+              {preset.label}
+            </button>
+          ))}
         </div>
       </div>
     </div>

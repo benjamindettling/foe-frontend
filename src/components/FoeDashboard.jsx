@@ -7,6 +7,7 @@ import {
 } from "../api/foeApi";
 import PlayerTable from "./PlayerTable";
 import SettingsPanel from "./SettingsPanel";
+import { FOE_PRESETS } from "../config/foePresets";
 
 const DEFAULT_SORT = { key: "points", direction: "desc" };
 
@@ -59,8 +60,7 @@ const normalizeSettings = (draft) => ({
 
 const parseNumber = (val) => {
   if (val === "" || val === null || val === undefined) return null;
-  const raw =
-    typeof val === "string" ? val.replace(/[',\s]/g, "").trim() : val;
+  const raw = typeof val === "string" ? val.replace(/[',\s]/g, "").trim() : val;
   const num = Number(raw);
   return Number.isFinite(num) ? num : null;
 };
@@ -231,7 +231,9 @@ const FoeDashboard = () => {
         const label =
           diffDays >= 0
             ? `${diffDays} day${diffDays === 1 ? "" : "s"} ago`
-            : `${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? "" : "s"} ahead`;
+            : `${Math.abs(diffDays)} day${
+                Math.abs(diffDays) === 1 ? "" : "s"
+              } ahead`;
         return { id: s.id, label, diffDays };
       })
       .sort((a, b) => a.diffDays - b.diffDays);
@@ -533,57 +535,58 @@ const FoeDashboard = () => {
     });
   };
 
-  const applyPresetDefault = () => {
+  const handleApplyPreset = (presetId) => {
     if (!activeTab) return;
-    const base = makeDefaultSettings(activeTab.settings?.snapshotId);
-    const normalized = normalizeSettings(base);
-    setSettingsDraft(normalized);
-    setTabs((prev) =>
-      prev.map((tab) =>
-        tab.id === activeTab.id ? { ...tab, settings: normalized } : tab
-      )
-    );
-  };
 
-  const applyPresetRecruit = () => {
-    if (!activeTab) return;
-    const snapshotId = activeTab.settings?.snapshotId;
+    const preset = FOE_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
 
-    // pick comparison with >=14 days, otherwise the furthest available
-    let chosenComparison = "";
-    const sortedByDiff = [...(comparisonOptions || [])].sort(
-      (a, b) => a.diffDays - b.diffDays
-    );
-    const candidate = sortedByDiff.find((opt) => opt.diffDays >= 14);
-    chosenComparison = candidate
-      ? candidate.id
-      : sortedByDiff.length
-      ? sortedByDiff[sortedByDiff.length - 1].id
-      : "";
+    // Make sure we always have a dataset to work with
+    const snapshotId = activeTab.settings?.snapshotId ?? snapshots[0]?.id ?? "";
 
-    const futureEraIndex = ERA_ORDER.indexOf("FutureEra");
-    const preset = {
-      snapshotId: snapshotId ?? "",
-      comparisonSnapshotId: chosenComparison,
-      minEra: futureEraIndex >= 0 ? futureEraIndex + 1 : "",
-      minPoints: 10000000,
-      maxPoints: "",
-      minBattles: 10000,
-      maxBattles: "",
-      minBattlesDiff: "",
-      maxBattlesDiff: "",
-      excludedGuilds: ["𝕯𝖊𝖘𝖕𝖊𝖗𝖆𝖉𝖔𝖘", "Outsiders"],
-      showInvitation: true,
-      invitationCutoff: "",
-      excludeContacted: false,
+    // Start from your "blank" default for this snapshot
+    const base = makeDefaultSettings(snapshotId);
+
+    // Merge preset settings on top of that
+    let nextSettings = {
+      ...base,
+      ...preset.settings,
     };
-    const normalized = normalizeSettings(preset);
+
+    // --- Dynamic: resolve minEraName into the numeric era index (1-based) ---
+    if (preset.settings.minEraName) {
+      const eraIndex = ERA_ORDER.indexOf(preset.settings.minEraName);
+      if (eraIndex >= 0) {
+        nextSettings.minEra = eraIndex + 1; // your UI expects 1-based era index
+      }
+    }
+
+    // --- Dynamic: for "recruit", choose a comparison snapshot >= 14 days ago ---
+    if (presetId === "recruit") {
+      const sortedByDiff = [...(comparisonOptions || [])].sort(
+        (a, b) => a.diffDays - b.diffDays
+      );
+      const candidate = sortedByDiff.find((opt) => opt.diffDays >= 14);
+
+      nextSettings.comparisonSnapshotId = candidate
+        ? candidate.id
+        : sortedByDiff.length
+        ? sortedByDiff[sortedByDiff.length - 1].id
+        : "";
+    }
+
+    const normalized = normalizeSettings(nextSettings);
 
     setSettingsDraft(normalized);
     setTabs((prev) =>
       prev.map((tab) =>
         tab.id === activeTab.id
-          ? { ...tab, settings: normalized, sortConfig: { key: "battles_diff", direction: "desc" } }
+          ? {
+              ...tab,
+              settings: normalized,
+              // If the preset specifies a sortConfig, apply it; otherwise keep the tab's sort.
+              sortConfig: preset.sortConfig || tab.sortConfig || DEFAULT_SORT,
+            }
           : tab
       )
     );
@@ -644,8 +647,8 @@ const FoeDashboard = () => {
               settings={settingsDraft}
               onChange={handleSettingsChange}
               onApplyAll={applySettingsToAll}
-              onPresetDefault={applyPresetDefault}
-              onPresetRecruit={applyPresetRecruit}
+              presets={FOE_PRESETS}
+              onApplyPreset={handleApplyPreset}
               availableGuilds={availableGuilds}
               isBusy={isBaseLoading || isComparisonLoading}
               eraOptions={ERA_ORDER.map((name, idx) => ({
@@ -665,7 +668,9 @@ const FoeDashboard = () => {
                 Showing {displayRows.length.toLocaleString()} of{" "}
                 {sortedRows.length.toLocaleString()} rows
               </span>
-              {isBaseLoading && <span className="pill pill-warn">Loading...</span>}
+              {isBaseLoading && (
+                <span className="pill pill-warn">Loading...</span>
+              )}
               {isComparisonLoading && (
                 <span className="pill pill-ghost">Loading comparison...</span>
               )}
@@ -678,7 +683,7 @@ const FoeDashboard = () => {
                 onSort={handleSort}
                 sortConfig={activeTab?.sortConfig || DEFAULT_SORT}
                 onGuildClick={handleGuildClick}
-                showInvitation={!!(activeTab?.settings?.showInvitation)}
+                showInvitation={!!activeTab?.settings?.showInvitation}
                 onRecruitmentUpdate={handleRecruitmentUpdate}
                 snapshotId={activeTab?.settings?.snapshotId}
               />
@@ -686,7 +691,8 @@ const FoeDashboard = () => {
 
             {activeTab?.settings?.comparisonSnapshotId && (
               <p className="foe-legend">
-                Battles Diff = Battles in dataset - Battles in comparison dataset.
+                Battles Diff = Battles in dataset - Battles in comparison
+                dataset.
               </p>
             )}
           </div>
