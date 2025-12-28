@@ -1,5 +1,5 @@
 // src/components/FoeDashboard.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchPlayersBySnapshot,
   fetchSnapshots,
@@ -46,7 +46,7 @@ const makeDefaultSettings = (snapshotId) => ({
   minBattlesDiff: "",
   maxBattlesDiff: "",
   excludedGuilds: [],
-  showInvitation: false,
+  showInvitation: true,
   invitationCutoff: "",
   excludeContacted: false,
 });
@@ -82,6 +82,7 @@ const FoeDashboard = () => {
   const [settingsDraft, setSettingsDraft] = useState(null);
   const [loadingSnapshotIds, setLoadingSnapshotIds] = useState(new Set());
   const [error, setError] = useState(null);
+  const snapshotCooldowns = useRef(new Map());
 
   const activeTab = useMemo(
     () => tabs.find((t) => t.id === activeTabId) || tabs[0],
@@ -122,6 +123,45 @@ const FoeDashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const loadSnapshotRows = (id) => {
+    if (!Number.isFinite(id)) return;
+    if (playerCache.has(id)) return;
+    if (loadingSnapshotIds.has(id)) return;
+
+    const cooldownUntil = snapshotCooldowns.current.get(id);
+    if (cooldownUntil && cooldownUntil > Date.now()) return;
+
+    setLoadingSnapshotIds((prev) => new Set(prev).add(id));
+    fetchPlayersBySnapshot(id)
+      .then((rows) => {
+        const normalized = Array.isArray(rows) ? rows : [];
+        setPlayerCache((prev) => {
+          const next = new Map(prev);
+          next.set(id, normalized);
+          return next;
+        });
+        snapshotCooldowns.current.delete(id);
+      })
+      .catch((err) => {
+        console.error(err);
+        const friendlyError =
+          err?.status === 429 || /429/.test(err?.message)
+            ? "Request limit hit while loading player data. Please wait and try again."
+            : "Failed to load player data.";
+        setError(friendlyError);
+        const retryAfterMs = Number(err?.retryAfterMs);
+        const cooldownMs = Number.isFinite(retryAfterMs) ? retryAfterMs : 8000;
+        snapshotCooldowns.current.set(id, Date.now() + cooldownMs);
+      })
+      .finally(() => {
+        setLoadingSnapshotIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      });
+  };
+
   // Ensure required snapshot datasets are loaded
   useEffect(() => {
     const neededIds = new Set();
@@ -134,62 +174,13 @@ const FoeDashboard = () => {
       }
     });
 
-    neededIds.forEach((id) => {
-      if (!Number.isFinite(id)) return;
-      if (playerCache.has(id)) return;
-      if (loadingSnapshotIds.has(id)) return;
-
-      setLoadingSnapshotIds((prev) => new Set(prev).add(id));
-      fetchPlayersBySnapshot(id)
-        .then((rows) => {
-          const normalized = Array.isArray(rows) ? rows : [];
-          setPlayerCache((prev) => {
-            const next = new Map(prev);
-            next.set(id, normalized);
-            return next;
-          });
-        })
-        .catch((err) => {
-          console.error(err);
-          setError("Failed to load player data.");
-        })
-        .finally(() => {
-          setLoadingSnapshotIds((prev) => {
-            const next = new Set(prev);
-            next.delete(id);
-            return next;
-          });
-        });
-    });
+    neededIds.forEach((id) => loadSnapshotRows(id));
   }, [tabs, playerCache, loadingSnapshotIds]);
 
   // Explicitly load active snapshot rows if missing
   useEffect(() => {
     const id = Number(activeTab?.settings?.snapshotId);
-    if (!Number.isFinite(id)) return;
-    if (playerCache.has(id) || loadingSnapshotIds.has(id)) return;
-
-    setLoadingSnapshotIds((prev) => new Set(prev).add(id));
-    fetchPlayersBySnapshot(id)
-      .then((rows) => {
-        const normalized = Array.isArray(rows) ? rows : [];
-        setPlayerCache((prev) => {
-          const next = new Map(prev);
-          next.set(id, normalized);
-          return next;
-        });
-      })
-      .catch((err) => {
-        console.error(err);
-        setError("Failed to load player data.");
-      })
-      .finally(() => {
-        setLoadingSnapshotIds((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      });
+    loadSnapshotRows(id);
   }, [activeTab, playerCache, loadingSnapshotIds]);
 
   // Keep settings draft aligned with active tab

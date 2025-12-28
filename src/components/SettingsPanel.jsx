@@ -71,13 +71,13 @@ const SettingsPanel = ({
             onClick={onApplyAll}
             disabled={isBusy}
           >
-            Apply to all
+            Auf alle Tabs anwenden
           </button>
         </div>
       </div>
 
       <div className="foe-settings-group">
-        <label htmlFor="dataset-select">Dataset</label>
+        <label htmlFor="dataset-select">Datenset</label>
         <select
           id="dataset-select"
           value={settings.snapshotId ?? ""}
@@ -92,7 +92,7 @@ const SettingsPanel = ({
       </div>
 
       <div className="foe-settings-group">
-        <label htmlFor="comparison-select">Comparison dataset</label>
+        <label htmlFor="comparison-select">Vergleichs Datenset</label>
         <select
           id="comparison-select"
           value={settings.comparisonSnapshotId ?? ""}
@@ -123,7 +123,7 @@ const SettingsPanel = ({
       </div>
 
       <div className="foe-settings-group foe-settings-grid">
-        <label>Points</label>
+        <label>Punkte</label>
         <div className="foe-range">
           <input
             type="text"
@@ -134,7 +134,7 @@ const SettingsPanel = ({
             }
             placeholder="min"
           />
-          <span>to</span>
+          <span>bis</span>
           <input
             type="text"
             inputMode="numeric"
@@ -148,7 +148,7 @@ const SettingsPanel = ({
       </div>
 
       <div className="foe-settings-group foe-settings-grid">
-        <label>Battles</label>
+        <label>Kämpfe</label>
         <div className="foe-range">
           <input
             type="text"
@@ -159,7 +159,7 @@ const SettingsPanel = ({
             }
             placeholder="min"
           />
-          <span>to</span>
+          <span>bis</span>
           <input
             type="text"
             inputMode="numeric"
@@ -173,7 +173,7 @@ const SettingsPanel = ({
       </div>
 
       <div className="foe-settings-group foe-settings-grid">
-        <label>Battles Diff</label>
+        <label>Kämpfe Differenz</label>
         <div className="foe-range">
           <input
             type="text"
@@ -184,7 +184,7 @@ const SettingsPanel = ({
             }
             placeholder="min"
           />
-          <span>to</span>
+          <span>bis</span>
           <input
             type="text"
             inputMode="numeric"
@@ -198,7 +198,7 @@ const SettingsPanel = ({
       </div>
 
       <div className="foe-settings-group">
-        <label>Exclude guilds</label>
+        <label>Exkludiere Gilde</label>
         <div className="foe-exclude-input">
           <input
             type="text"
@@ -245,7 +245,7 @@ const SettingsPanel = ({
             checked={!!settings.showInvitation}
             onChange={(e) => onToggleInvitation?.(e.target.checked)}
           />
-          Show invitation column
+          Zeite "Einladung" Spalte
         </label>
         <input
           type="date"
@@ -253,17 +253,14 @@ const SettingsPanel = ({
           onChange={(e) => onChange("invitationCutoff", e.target.value)}
           disabled={!settings.showInvitation}
         />
-        <small>
-          Exclude players contacted after this date (only when invitation column
-          is shown).
-        </small>
+        <small>Exkludiere Spieler die angeschrieben wurden nach:</small>
         <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <input
             type="checkbox"
             checked={!!settings.excludeContacted}
             onChange={(e) => onChange("excludeContacted", e.target.checked)}
           />
-          Exclude all contacted players
+          Exkludiere alle bereits kontaktierten Spieler
         </label>
       </div>
 

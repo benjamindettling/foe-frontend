@@ -5,9 +5,9 @@ const BASE_COLUMNS = [
   { key: "player_name", label: "Player" },
   { key: "guild_name", label: "Guild" },
   { key: "era_nr", label: "Era" },
-  { key: "points", label: "Points" },
-  { key: "battles", label: "Battles" },
-  { key: "battles_diff", label: "Battles Diff" },
+  { key: "points", label: "Punkte" },
+  { key: "battles", label: "Kämpfe" },
+  { key: "battles_diff", label: "Kampf Diff" },
 ];
 
 const daysSince = (dateStr) => {
@@ -340,7 +340,7 @@ const PlayerTable = ({
                         </label>
 
                         <label className="invitation-popover__label">
-                          Last contacted
+                          Zuletzt kontaktiert
                           <input
                             type="date"
                             value={
