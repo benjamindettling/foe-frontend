@@ -32,6 +32,8 @@ const invitationColors = (dateStr) => {
 const formatRecruitmentStatus = (status) => {
   if (!status) return "";
   switch (status.toLowerCase()) {
+    case "gejoint":
+      return "gejoint";
     case "fresh":
       return "frisch";
     case "ignored":
@@ -204,6 +206,8 @@ const PlayerTable = ({
             : { badge: undefined, row: undefined };
 
           const statusKey = (row.recruitment_status || "").toLowerCase();
+          const isRisingCrown =
+            (row.guild_name || "").toLowerCase() === "rising crown";
 
           // Keep the row tint by age, but override badge color for "Schwach"
           let colorSet = baseColorSet;
@@ -213,10 +217,18 @@ const PlayerTable = ({
               badge: "#8B4513", // brown
             };
           }
-          const rowStyle = colorSet.row
+          let rowStyle = colorSet.row
             ? { backgroundColor: colorSet.row }
             : undefined;
+          if (isRisingCrown) {
+            rowStyle = { backgroundColor: "#d8e9ff" }; // override for Rising Crown
+          }
           const isEmptyInvitation = !row.recruitment_status;
+          const badgeColor = isRisingCrown
+            ? "#4da3ff"
+            : isEmptyInvitation
+            ? undefined
+            : colorSet.badge;
 
           return (
             <tr key={row.player_id} style={rowStyle}>
@@ -286,9 +298,7 @@ const PlayerTable = ({
                         (isEmptyInvitation ? " invitation-badge--empty" : "")
                       }
                       style={{
-                        backgroundColor: isEmptyInvitation
-                          ? undefined
-                          : colorSet.badge,
+                        backgroundColor: badgeColor,
                       }}
                       onClick={() => {
                         const nextId =
@@ -336,6 +346,7 @@ const PlayerTable = ({
                             <option value="ignored">ignored</option>
                             <option value="declined">declined</option>
                             <option value="schwach">schwach</option>
+                            <option value="gejoint">gejoint</option>
                           </select>
                         </label>
 
